@@ -1,0 +1,12 @@
+# Ubuntu Cloud Image with KVM/QEMU
+
+This is what I have done so far to have a working VM under QEMU (my PC does not support KVM extensions).
+
+* Follow the guide on the [Community Wiki](https://help.ubuntu.com/community/KVM/Installation).
+* `sudo apt-get install virt-manager`.
+* Download the [Cloud Image](http://cloud-images.ubuntu.com/releases/precise/release/unpacked/).
+** You need the `.img` and the `xxx-vmlinuz-virtual` for your architecture.
+* Follow [these instructions](http://agiliq.com/blog/2012/07/using-ubuntu-cloud-images-in-kvm/).
+** Go down the cloud-init + hard disk boot path.
+* Run the created VM.
+* Log on with `ubuntu:yourpass` where `yourpass` is what you've provided as the `ubuntu-pass` kernel argument.
