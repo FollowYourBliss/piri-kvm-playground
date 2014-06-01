@@ -1,8 +1,10 @@
 #!/usr/bin/env python2
+
 import libvirt
 import sys
 import time
 
+# INIT - establish a connection with a local QEMU instance
 conn = libvirt.openReadOnly("qemu:///system")
 if None == conn:
     print 'Failed to open connection to the hypervisor'
@@ -32,9 +34,6 @@ class DomInfo:
     def toString(self):
         return "[%s]\nState:\t\t%d\nmaxMemory:\t%d\nmemory:\t\t%d\nnbVirtCPU:\t%d\ncpuTime:\t%d\n" % (self.name, self.state, self.maxMemory, self.memory, self.nbVirtCPU, self.cpuTime)
 
-def makeInfo(domainName, data):
-    return DomInfo(domainName, data)
-
 class DerivedDomInfo(DomInfo):
     cpuUsagePercent = 0
 
@@ -50,31 +49,60 @@ class DerivedDomInfo(DomInfo):
         self.cpuUsagePercent = percentBase / self.nbVirtCPU
 
     def toString(self):
-        return "[%s]\nState:\t\t%d\nmaxMemory:\t%d\nmemory:\t\t%d\nnbVirtCPU:\t%d\ncpuTime:\t%d\nCPU usage:\t%2f%%\n" % (self.name, self.state, self.maxMemory, self.memory, self.nbVirtCPU, self.cpuTime, self.cpuUsagePercent)
+        return "[%s]\nState:\t\t%d\nmaxMemory:\t%d\nmemory:\t\t%d\nnbVirtCPU:\t%d\ncpuTime:\t%d\nCPU usage:\t%f%%\n" % (self.name, self.state, self.maxMemory, self.memory, self.nbVirtCPU, self.cpuTime, self.cpuUsagePercent)
+
+def makeInfo(domainName, data):
+    return DomInfo(domainName, data)
 
 def makeDerivedInfo(previousDomInfo, currentDomInfo, beforeTime, nowTime):
     return DerivedDomInfo(previousDomInfo, currentDomInfo, beforeTime, nowTime)
 
-def getDomainInfo(domainName):
-    try:
-        domain = conn.lookupByName(domainName)
-        return makeInfo(domainName, domain.info())
-    except:
-        print 'Failed to find the \'%s\' domain' % (domainName)
-        sys.exit(1)
+class DomainInfoPoller:
+    previousRecords = {}
+    before = {}
+    domainsToPoll = []
+    now = -1
 
-def pollDomainInfo(domainName):
-    previousRecord = -1
-    before = -1
-    while 1:
-        currentRecord = getDomainInfo(domainName)
-        now = time.time()
-        if previousRecord != -1:
-            print makeDerivedInfo(previousRecord, currentRecord, before, now).toString()
-        previousRecord = currentRecord
-        before = now
-        time.sleep(.5)
+    def getDomainInfo(self, domainName):
+        try:
+            domain = conn.lookupByName(domainName)
+            return makeInfo(domainName, domain.info())
+        except:
+            print 'Failed to find the \'%s\' domain' % (domainName)
+            sys.exit(1)
 
-pollDomainInfo("test")
+    def includeDomain(self, domainName):
+        self.domainsToPoll.append(domainName)
 
+    def includeDomains(self, domainNames):
+        self.domainsToPoll = self.domainsToPoll + domainNames
 
+    def run(self, domainInfoReceiver):
+        while 1:
+            for domainName in self.domainsToPoll:
+                self.now = time.time()
+                currentRecord = self.getDomainInfo(domainName)
+
+                if domainName in self.previousRecords:
+                    domainInfoReceiver(makeDerivedInfo(self.previousRecords[domainName], currentRecord, self.before[domainName], self.now))
+
+                self.previousRecords[domainName] = currentRecord
+                self.before[domainName] = self.now
+            time.sleep(.5)
+
+# EDIT THE CODE BELOW.
+
+def printDomainInfo(info):
+    print info.toString()
+
+dp = DomainInfoPoller()
+
+dp.includeDomains(["test", "test2"])
+
+# These also work:
+# dp.includeDomain("test")
+# dp.includeDomain("test2")
+
+# You can pass any function You like here.
+# Every 500ms, it will receive an instance of `DerivedDomInfo` for each included domain.
+dp.run(printDomainInfo)
